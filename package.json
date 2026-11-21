@@ -1,7 +1,7 @@
 {
   "name": "fixmate-server",
   "version": "1.0.0",
-  "description": "",
+  "description": "Express API for the FixMate repair platform",
   "main": "index.js",
   "scripts": {
     "dev": "tsx watch index.js",
