@@ -1,12 +1,14 @@
 {
   "name": "fixmate-server",
   "version": "1.0.0",
-  "description": "Express and MongoDB server for the FixMate repair platform",
+  "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "node --watch index.js",
-    "start": "node index.js",
-    "test": "node --test"
+    "dev": "tsx watch index.js",
+    "start": "tsx index.js",
+    "build": "node --check index.js",
+    "test": "tsx --test test/*.test.ts",
+    "seed": "tsx scripts/seed.js"
   },
   "keywords": [],
   "type": "module",
