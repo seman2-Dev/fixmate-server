@@ -14,7 +14,6 @@ Express.js, MongoDB, JWT, Stripe and webhook API for the FixMate repair platform
 ```bash
 npm install
 cp .env.example .env
-npm run seed
 npm run dev
 ```
 
