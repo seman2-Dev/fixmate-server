@@ -61,5 +61,46 @@ for (const [title, category, description, image, basePrice, serviceArea, technic
   );
 }
 
-console.log(`Seeded ${demoUsers.length} users and ${catalog.length} approved services`);
+const customer = await users.findOne({ email: 'ayesha@fixmate.dev' });
+const seedBookings = [
+  ['iPhone Screen Replacement', 'requested', 'unpaid'],
+  ['Split AC Servicing & Gas Check', 'accepted', 'unpaid'],
+  ['Laptop Deep Cleaning & Thermal Paste', 'in-progress', 'unpaid'],
+  ['LED/LCD TV Backlight Repair', 'completed', 'unpaid'],
+  ['Washing Machine Drain & Spin Repair', 'rejected', 'unpaid'],
+];
+
+for (const [title, status, paymentStatus] of seedBookings) {
+  const service = await services.findOne({ title });
+  if (!service || !customer) continue;
+  await bookings.updateOne(
+    { customerEmail: customer.email, serviceTitle: title },
+    {
+      $set: {
+        serviceId: String(service._id),
+        serviceTitle: service.title,
+        serviceImage: service.image,
+        category: service.category,
+        basePrice: service.basePrice,
+        technicianName: service.technicianName,
+        technicianEmail: service.technicianEmail,
+        customerName: customer.name,
+        customerEmail: customer.email,
+        customerPhone: customer.phone,
+        address: 'Banani, Dhaka',
+        preferredDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        problemDescription: `Seed booking for ${title}. Please diagnose and repair the issue.`,
+        status,
+        finalAmount: status === 'completed' ? service.basePrice : service.basePrice,
+        paymentStatus,
+        statusHistory: [{ status: 'requested', changedAt: new Date() }, ...(status === 'requested' ? [] : [{ status, changedAt: new Date() }])],
+        updatedAt: new Date(),
+      },
+      $setOnInsert: { createdAt: new Date() },
+    },
+    { upsert: true },
+  );
+}
+
+console.log(`Seeded ${demoUsers.length} users, ${catalog.length} approved services and ${seedBookings.length} bookings`);
 await client.close();
