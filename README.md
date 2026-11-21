@@ -49,6 +49,20 @@ npm start
 - Technician service CRUD and job status APIs
 - Admin user, service, booking and payment APIs
 - Profile, Stripe Checkout and idempotent payment verification APIs
-- Stripe webhook payment confirmation
+- Stripe webhook payment confirmation at `/api/stripe/webhook`
+- Health check at `/api/health`
+
+## Production
+
+The production API is intended to be deployed at `https://fixmate-server1.vercel.app`.
+Set `CLIENT_URL` to the deployed Next.js origin, and set `CLIENT_ORIGINS` to a
+comma-separated allowlist containing that origin. Set `JWKS_URL` to
+`https://<client-domain>/api/auth/jwks`.
+
+In Stripe, configure the webhook endpoint:
+`https://fixmate-server1.vercel.app/api/stripe/webhook`
+
+The event should subscribe to `checkout.session.completed`; copy the generated
+signing secret into `STRIPE_WEBHOOK_SECRET`.
 
 No secrets or `.env` files are committed.
