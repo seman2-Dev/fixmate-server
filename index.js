@@ -1,16 +1,34 @@
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { MongoClient, ObjectId } from 'mongodb';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import Stripe from 'stripe';
-import { canMoveStatus } from './lib/business.js';
+import { canMoveStatus, canRequestService } from './lib/business.js';
 
 // Third-party clients are initialized once and shared by every API route.
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
 const port = process.env.PORT || 5000;
+app.disable('x-powered-by');
+app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 300,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    skip: (req) => req.originalUrl === '/api/stripe/webhook'
+        || req.originalUrl === '/api/payments/webhook',
+});
+app.use('/api/', apiLimiter);
 
 // BetterAuth runs on the deployed Next.js client and issues the JWTs consumed here.
 const clientUrl = (process.env.CLIENT_URL || 'http://localhost:3000').replace(/\/+$/, '');
@@ -25,8 +43,9 @@ app.use(cors({
     },
 }));
 app.use((req, res, next) => {
-    if (req.originalUrl === '/api/payments/webhook') return next();
-    express.json()(req, res, next);
+    if (req.originalUrl === '/api/stripe/webhook'
+        || req.originalUrl === '/api/payments/webhook') return next();
+    express.json({ limit: '1mb' })(req, res, next);
 });
 
 const client = new MongoClient(process.env.MONGODB_URI);
@@ -47,6 +66,10 @@ await payments.createIndex({ bookingId: 1 }, { unique: true });
 
 app.get('/', (req, res) => {
     res.send('fixmate server is running');
+})
+
+app.get('/api/health', (req, res) => {
+    res.send({ ok: true, service: 'fixmate-server', timestamp: new Date().toISOString() });
 })
 
 // ======================= Validation and query helpers =======================
@@ -150,7 +173,7 @@ const savePayment = async (session) => {
 }
 
 // Stripe webhook: a wrong signature gets 400
-app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+app.post(['/api/stripe/webhook', '/api/payments/webhook'], express.raw({ type: 'application/json' }), async (req, res) => {
     let event;
     try {
         event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], process.env.STRIPE_WEBHOOK_SECRET);
@@ -324,6 +347,9 @@ app.post('/api/bookings', verifyToken, verifyCustomer, async (req, res) => {
     if (!service) return res.status(404).send({ message: 'This service is not available' });
 
     const customer = req.user;
+    if (!canRequestService(customer.email, service.technicianEmail)) {
+        return res.status(403).send({ message: 'Technicians cannot request their own service' });
+    }
     // service and technician details are copied, so the booking stays correct if the service changes later
     const booking = {
         serviceId: String(service._id),
@@ -517,7 +543,9 @@ app.get('/api/admin/services', verifyToken, verifyAdmin, async (req, res) => {
 app.patch('/api/admin/services/:id/approval', verifyToken, verifyAdmin, async (req, res) => {
     const id = toId(req.params.id);
     const approvalStatus = text(req.body?.approvalStatus);
-    if (!approvals.includes(approvalStatus)) return res.status(400).send({ message: 'approvalStatus must be approved, rejected or pending' });
+    if (!['approved', 'rejected'].includes(approvalStatus)) {
+        return res.status(400).send({ message: 'approvalStatus must be approved or rejected' });
+    }
 
     const result = id ? await services.updateOne({ _id: id }, { $set: { approvalStatus } }) : null;
     if (!result || result.matchedCount === 0) return res.status(404).send({ message: 'Service not found' });
@@ -583,8 +611,12 @@ app.use((err, req, res, next) => {
     res.status(status).send({ message: status === 500 ? 'Internal server error' : 'Invalid request' });
 })
 
-app.listen(port, () => {
-    console.log(`fixmate server is running on port: ${port}`);
-})
+const isDirectRun = process.argv[1]
+    && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isDirectRun) {
+    app.listen(port, () => {
+        console.log(`fixmate server is running on port: ${port}`);
+    });
+}
 
 export default app;
