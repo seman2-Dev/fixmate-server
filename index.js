@@ -34,7 +34,12 @@ app.use('/api/', apiLimiter);
 // BetterAuth runs on the deployed Next.js client and issues the JWTs consumed here.
 const clientUrl = (process.env.CLIENT_URL || 'http://localhost:3000').replace(/\/+$/, '');
 // CLIENT_ORIGINS accepts a comma-separated allowlist; add the production domain before deployment.
-const origins = (process.env.CLIENT_ORIGINS || clientUrl).split(',').map((o) => o.trim().replace(/\/+$/, ''));
+const origins = [
+    ...(process.env.CLIENT_ORIGINS || clientUrl).split(','),
+    clientUrl,
+    'https://fixmate-client.vercel.app',
+    'https://fixmate-client1.vercel.app',
+].map((origin) => origin.trim().replace(/\/+$/, '')).filter(Boolean);
 
 // CORS and JSON parsing run before protected route middleware.
 app.use(cors({
