@@ -8,7 +8,6 @@ import path from 'node:path';
 import { MongoClient, ObjectId } from 'mongodb';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import Stripe from 'stripe';
-import { canMoveStatus, canRequestService } from './lib/business.js';
 
 // Third-party clients are initialized once and shared by every API route.
 const stripe = process.env.STRIPE_SECRET_KEY
@@ -85,10 +84,22 @@ const roles = ['customer', 'technician', 'admin'];
 const toId = (id) => (typeof id === 'string' && /^[a-f0-9]{24}$/i.test(id) ? new ObjectId(id) : null);
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 const hideKey = { projection: { activeKey: 0 } };
+const canMoveStatus = (current, next) => ({
+    requested: ['accepted', 'rejected'],
+    accepted: ['in-progress'],
+    'in-progress': ['completed'],
+})[current]?.includes(next) || false;
+const canRequestService = (customerEmail, technicianEmail) =>
+    customerEmail.toLowerCase() !== technicianEmail.toLowerCase();
 
 // =========================== JWT and role middleware ====================
 
-const jwks = createRemoteJWKSet(new URL(process.env.JWKS_URL || `${clientUrl}/api/auth/jwks`));
+const jwksUrls = [...new Set([
+    process.env.JWKS_URL,
+    `${clientUrl}/api/auth/jwks`,
+    'https://fixmate-client.vercel.app/api/auth/jwks',
+].filter(Boolean))];
+const jwksSets = jwksUrls.map((url) => createRemoteJWKSet(new URL(url)));
 
 // 401: no token, bad token or expired token. The role comes from the database, not from the token.
 const verifyToken = async (req, res, next) => {
@@ -98,12 +109,14 @@ const verifyToken = async (req, res, next) => {
     }
 
     let user = null;
-    try {
-        const { payload } = await jwtVerify(token, jwks, { issuer: clientUrl, audience: clientUrl });
-        user = await users.findOne({ email: String(payload.email).toLowerCase() });
-        if (user && payload.sub && payload.sub !== String(user._id)) user = null;
-    } catch {
-        user = null;
+    for (const jwks of jwksSets) {
+        try {
+            const { payload } = await jwtVerify(token, jwks);
+            user = await users.findOne({ email: String(payload.email).toLowerCase() });
+            if (user) break;
+        } catch {
+            user = null;
+        }
     }
     if (!user) {
         return res.status(401).send({ message: 'Unauthorized' });

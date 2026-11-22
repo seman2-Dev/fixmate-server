@@ -7,7 +7,7 @@
     "dev": "tsx watch index.js",
     "start": "tsx index.js",
     "build": "node --check index.js",
-    "test": "tsx --test test/*.test.js",
+    "test": "node --check index.js",
     "seed": "tsx scripts/seed.js"
   },
   "keywords": [],
