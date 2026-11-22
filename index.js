@@ -103,7 +103,10 @@ const jwksUrls = [...new Set([
     process.env.JWKS_URL,
     `${clientUrl}/api/auth/jwks`,
     'https://fixmate-client.vercel.app/api/auth/jwks',
-].filter(Boolean))];
+    'https://fixmate-client1.vercel.app/api/auth/jwks',
+].filter((url) =>
+    url && (!process.env.VERCEL || !/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::|\/)/.test(url))
+))];
 const jwksSets = jwksUrls.map((url) => createRemoteJWKSet(new URL(url)));
 
 // 401: no token, bad token or expired token. The role comes from the database, not from the token.
@@ -117,7 +120,17 @@ const verifyToken = async (req, res, next) => {
     for (const jwks of jwksSets) {
         try {
             const { payload } = await jwtVerify(token, jwks);
-            user = await users.findOne({ email: String(payload.email).toLowerCase() });
+            const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
+            const subject = typeof payload.sub === 'string' ? payload.sub : '';
+            if (email) {
+                user = await users.findOne({ email });
+            }
+            if (!user && subject) {
+                const subjectId = toId(subject);
+                user = subjectId
+                    ? await users.findOne({ _id: subjectId })
+                    : await users.findOne({ _id: subject });
+            }
             if (user) break;
         } catch {
             user = null;
@@ -127,13 +140,14 @@ const verifyToken = async (req, res, next) => {
         return res.status(401).send({ message: 'Unauthorized' });
     }
 
-    req.user = { ...user, role: user.role || 'customer' };
+    const role = typeof user.role === 'string' ? user.role.trim().toLowerCase() : 'customer';
+    req.user = { ...user, role: roles.includes(role) ? role : 'customer' };
     next();
 }
 
 // 403: valid user, wrong role. Must be used after verifyToken
 const verifyRole = (role) => (req, res, next) => {
-    if (req.user.role !== role) {
+    if (String(req.user.role).trim().toLowerCase() !== role) {
         return res.status(403).send({ message: 'Forbidden' });
     }
     next();
