@@ -11,7 +11,9 @@ import Stripe from 'stripe';
 import { canMoveStatus, canRequestService } from './lib/business.js';
 
 // Third-party clients are initialized once and shared by every API route.
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe = process.env.STRIPE_SECRET_KEY
+    ? new Stripe(process.env.STRIPE_SECRET_KEY)
+    : null;
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -174,6 +176,7 @@ const savePayment = async (session) => {
 
 // Stripe webhook: a wrong signature gets 400
 app.post(['/api/stripe/webhook', '/api/payments/webhook'], express.raw({ type: 'application/json' }), async (req, res) => {
+    if (!stripe) return res.status(503).send({ message: 'Stripe is not configured' });
     let event;
     try {
         event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], process.env.STRIPE_WEBHOOK_SECRET);
@@ -455,6 +458,7 @@ app.patch('/api/bookings/:id/status', verifyToken, verifyTechnician, async (req,
 // Pay Now. The amount always comes from the booking in the database, never from the client.
 // Only a completed and unpaid booking of the logged-in customer can be paid.
 app.post('/api/payments/create-checkout-session', verifyToken, verifyCustomer, async (req, res) => {
+    if (!stripe) return res.status(503).send({ message: 'Stripe is not configured' });
     const id = toId(req.body?.bookingId);
     const booking = id ? await bookings.findOne({ _id: id }) : null;
     if (!booking) return res.status(404).send({ message: 'Booking not found' });
@@ -483,6 +487,7 @@ app.post('/api/payments/create-checkout-session', verifyToken, verifyCustomer, a
 
 // the /payment/success page calls this with the session_id from the URL
 app.get('/api/payments/verify', verifyToken, verifyCustomer, async (req, res) => {
+    if (!stripe) return res.status(503).send({ message: 'Stripe is not configured' });
     const sessionId = text(req.query.session_id);
     if (!/^cs_[A-Za-z0-9_]+$/.test(sessionId)) return res.status(400).send({ message: 'session_id is required' });
 
@@ -618,5 +623,7 @@ if (isDirectRun) {
         console.log(`fixmate server is running on port: ${port}`);
     });
 }
+
+export { app };
 
 export default app;
