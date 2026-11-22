@@ -31,7 +31,7 @@ async function ensureAccount(account) {
     });
     if (!response.ok) {
         const body = await response.text();
-        if (!body.toLower.includes('already')) {
+        if (!body.toLowerCase().includes('already')) {
             console.warn(`Could not create ${account.email}: ${response.status} ${body}`);
         }
     }
@@ -139,12 +139,17 @@ for (const booking of bookingRows) {
     if (booking.status === 'completed') booking.statusHistory.push({ status: 'completed', changedAt: new Date(now - 7200000) });
     if (booking.paymentStatus === 'paid') booking.statusHistory.push({ status: 'paid', changedAt: new Date(now - 3600000) });
 }
-const bookingResult = await bookings.insertMany(bookingRows.map((booking) => ({
-    ...booking,
-    activeKey: ['requested', 'accepted', 'in-progress'].includes(booking.status)
-        ? `${booking.customerEmail}|${booking.serviceId}`
-        : undefined,
-})));
+const bookingDocuments = bookingRows.map((booking) => {
+    if (['requested', 'accepted', 'in-progress'].includes(booking.status)) {
+        return {
+            ...booking,
+            activeKey: `${booking.customerEmail}|${booking.serviceId}`,
+        };
+    }
+    const { activeKey, ...completedBooking } = booking;
+    return completedBooking;
+});
+const bookingResult = await bookings.insertMany(bookingDocuments);
 
 const paidId = bookingResult.insertedIds[4];
 await payments.insertOne({
