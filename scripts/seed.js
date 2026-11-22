@@ -8,11 +8,10 @@ const clientUrl = (process.env.CLIENT_URL || 'http://localhost:3000').replace(/\
 const dbName = process.env.DB_NAME || 'fixmate';
 
 const accounts = [
-    { name: 'Ayesha Rahman', email: 'ayesha@fixmate.dev', role: 'customer', phone: '+8801711111111', area: 'Mirpur, Dhaka', bio: '' },
-    { name: 'Tanvir Hasan', email: 'tanvir@fixmate.dev', role: 'customer', phone: '+8801722222222', area: 'Dhanmondi, Dhaka', bio: '' },
-    { name: 'Rafiq Electronics', email: 'rafiq@fixmate.dev', role: 'technician', phone: '+8801733333333', area: 'Mirpur, Dhaka', bio: 'Certified smartphone and laptop technician with 8 years of repair experience.' },
-    { name: 'Nusrat Cooling Care', email: 'nusrat@fixmate.dev', role: 'technician', phone: '+8801744444444', area: 'Uttara, Dhaka', bio: 'AC, refrigerator and washing machine specialist for homes and offices.' },
-    { name: 'FixMate Admin', email: 'admin@fixmate.dev', role: 'admin', phone: '+8801755555555', area: 'Dhaka', bio: 'Platform administrator.' },
+    { name: 'Emran Hasan', email: 'emran@fixmate.dev', role: 'customer', password: 'FixMate1@customer', phone: '+8801711111111', area: 'Mirpur, Dhaka', bio: '' },
+    { name: 'Rafiq Electronics', email: 'rafiq@fixmate.dev', role: 'technician', password: 'FixMate1@technician', phone: '+8801733333333', area: 'Mirpur, Dhaka', bio: 'Certified smartphone and laptop technician with 8 years of repair experience.' },
+    { name: 'Nusrat Cooling Care', email: 'nusrat@fixmate.dev', role: 'technician', password: 'FixMate1@technician', phone: '+8801744444444', area: 'Uttara, Dhaka', bio: 'AC, refrigerator and washing machine specialist for homes and offices.' },
+    { name: 'FixMate Admin', email: 'admin@fixmate.dev', role: 'admin', password: 'FixMate1@admin', phone: '+8801755555555', area: 'Dhaka', bio: 'Platform administrator.' },
 ];
 
 async function ensureAccount(account) {
@@ -25,15 +24,15 @@ async function ensureAccount(account) {
         body: JSON.stringify({
             name: account.name,
             email: account.email,
-            password: 'FixMate1',
+            password: account.password,
             role: account.role,
         }),
     });
-    if (!response.ok) {
-        const body = await response.text();
-        if (!body.toLowerCase().includes('already')) {
-            console.warn(`Could not create ${account.email}: ${response.status} ${body}`);
-        }
+    if (response.ok) return;
+
+    const body = await response.text();
+    if (!body.toLowerCase().includes('already')) {
+        console.warn(`Could not create ${account.email}: ${response.status} ${body}`);
     }
 }
 
@@ -44,6 +43,15 @@ const users = db.collection('user');
 const services = db.collection('services');
 const bookings = db.collection('bookings');
 const payments = db.collection('payments');
+
+const seededEmails = accounts.map((account) => account.email);
+const existingUsers = await users.find({ email: { $in: seededEmails } }).toArray();
+const existingUserIds = existingUsers.map((user) => user._id);
+await Promise.all([
+    users.deleteMany({ email: { $in: seededEmails } }),
+    db.collection('account').deleteMany({ userId: { $in: existingUserIds } }),
+    db.collection('session').deleteMany({ userId: { $in: existingUserIds } }),
+]);
 
 for (const account of accounts) await ensureAccount(account);
 await Promise.all(accounts.map((account) => users.updateOne(
@@ -62,8 +70,8 @@ await Promise.all(accounts.map((account) => users.updateOne(
 
 await Promise.all([
     services.deleteMany({ technicianEmail: { $in: ['rafiq@fixmate.dev', 'nusrat@fixmate.dev'] } }),
-    bookings.deleteMany({ customerEmail: { $in: ['ayesha@fixmate.dev', 'tanvir@fixmate.dev'] } }),
-    payments.deleteMany({ customerEmail: { $in: ['ayesha@fixmate.dev', 'tanvir@fixmate.dev'] } }),
+    bookings.deleteMany({ customerEmail: { $in: ['emran@fixmate.dev', 'ayesha@fixmate.dev', 'tanvir@fixmate.dev'] } }),
+    payments.deleteMany({ customerEmail: { $in: ['emran@fixmate.dev', 'ayesha@fixmate.dev', 'tanvir@fixmate.dev'] } }),
 ]);
 
 const now = Date.now();
@@ -115,8 +123,8 @@ const makeBooking = (service, customerName, customerEmail, status, paymentStatus
     technicianEmail: service.technicianEmail,
     customerName,
     customerEmail,
-    customerPhone: customerEmail === 'ayesha@fixmate.dev' ? '+8801711111111' : '+8801722222222',
-    address: customerEmail === 'ayesha@fixmate.dev' ? 'House 12, Block C, Mirpur, Dhaka' : 'Road 7, Dhanmondi, Dhaka',
+    customerPhone: '+8801711111111',
+    address: 'House 12, Block C, Mirpur, Dhaka',
     preferredDate: new Date(now + (offset + 1) * 86400000),
     problemDescription: `Please inspect and repair ${service.title.toLowerCase()} for our home. We need a careful diagnosis and final quote.`,
     status,
@@ -127,11 +135,11 @@ const makeBooking = (service, customerName, customerEmail, status, paymentStatus
 });
 
 const bookingRows = [
-    makeBooking(service1, 'Ayesha Rahman', 'ayesha@fixmate.dev', 'requested', 'unpaid', 1),
-    makeBooking(service2, 'Ayesha Rahman', 'ayesha@fixmate.dev', 'accepted', 'unpaid', 2),
-    makeBooking(service3, 'Tanvir Hasan', 'tanvir@fixmate.dev', 'in-progress', 'unpaid', 3),
-    makeBooking(service4, 'Ayesha Rahman', 'ayesha@fixmate.dev', 'completed', 'unpaid', 4),
-    makeBooking(service1, 'Tanvir Hasan', 'tanvir@fixmate.dev', 'completed', 'paid', 5),
+    makeBooking(service1, 'Emran Hasan', 'emran@fixmate.dev', 'requested', 'unpaid', 1),
+    makeBooking(service2, 'Emran Hasan', 'emran@fixmate.dev', 'accepted', 'unpaid', 2),
+    makeBooking(service3, 'Emran Hasan', 'emran@fixmate.dev', 'in-progress', 'unpaid', 3),
+    makeBooking(service4, 'Emran Hasan', 'emran@fixmate.dev', 'completed', 'unpaid', 4),
+    makeBooking(service1, 'Emran Hasan', 'emran@fixmate.dev', 'completed', 'paid', 5),
 ];
 for (const booking of bookingRows) {
     if (booking.status !== 'requested') booking.statusHistory.push({ status: 'accepted', changedAt: new Date(now - 86400000) });
@@ -155,8 +163,8 @@ const paidId = bookingResult.insertedIds[4];
 await payments.insertOne({
     bookingId: String(paidId),
     serviceTitle: service1.title,
-    customerName: 'Tanvir Hasan',
-    customerEmail: 'tanvir@fixmate.dev',
+    customerName: 'Emran Hasan',
+    customerEmail: 'emran@fixmate.dev',
     technicianName: service1.technicianName,
     technicianEmail: service1.technicianEmail,
     amount: service1.basePrice,
